@@ -1,0 +1,10 @@
+version       = "0.1.0"
+author        = "bung87"
+description   = "An unofficial Microsoft Edge Text-to-Speech client for Nim using Chronos"
+license       = "MIT"
+srcDir        = "src"
+
+requires "nim >= 2.0.16"
+requires "chronos >= 4.4.1"
+requires "websock"
+requires "uuids"

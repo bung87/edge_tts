@@ -1,0 +1,13 @@
+speech.jsonl
+speech.mp3
+.nimble-local/
+nimcache/
+*.exe
+*.dll
+*.so
+*.dylib
+output.mp3
+output.jsonl
+nimble.develop
+nimble.paths
+nimbledeps

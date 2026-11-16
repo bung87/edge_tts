@@ -1,5 +1,5 @@
 import std/[json, strutils, tables]
-import ./[constants, text, token, types]
+import ./[constants, formats, text, token, types]
 
 type
   ParsedResponse* = object
@@ -40,13 +40,15 @@ proc splitHeadersAndData(data: openArray[byte], headerLength: int):
 proc speechConfigRequest*(config: TtsConfig): string =
   let wordBoundary = if config.boundary == WordBoundary: "true" else: "false"
   let sentenceBoundary = if config.boundary == SentenceBoundary: "true" else: "false"
+  let outputFormat = if config.outputFormat.len == 0: DefaultOutputFormat
+                     else: config.outputFormat
   "X-Timestamp:" & dateToString() & "\r\n" &
     "Content-Type:application/json; charset=utf-8\r\n" &
     "Path:speech.config\r\n\r\n" &
     "{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{" &
     "\"sentenceBoundaryEnabled\":\"" & sentenceBoundary & "\"," &
     "\"wordBoundaryEnabled\":\"" & wordBoundary & "\"}," &
-    "\"outputFormat\":\"" & OutputFormat & "\"}}}}"
+    "\"outputFormat\":\"" & outputFormat & "\"}}}}"
 
 proc buildSsml*(config: TtsConfig, escapedText: string): string =
   let voice = config.voice.replace("&", "&amp;").replace("'", "&apos;")
@@ -114,7 +116,8 @@ proc parseTextResponse*(data: openArray[byte], offsetCompensation = 0'i64): Pars
   else:
     raise newException(UnknownResponseError, "Unknown response path: " & path)
 
-proc parseBinaryResponse*(data: openArray[byte]): ParsedResponse =
+proc parseBinaryResponse*(data: openArray[byte],
+                          outputFormat = DefaultOutputFormat): ParsedResponse =
   if data.len < 2:
     raise newException(UnexpectedResponseError,
       "Binary response is missing its header length")
@@ -134,16 +137,19 @@ proc parseBinaryResponse*(data: openArray[byte]): ParsedResponse =
       return
     raise newException(UnexpectedResponseError,
       "Binary response without Content-Type contains data")
-  if headers.getOrDefault("content-type") != "audio/mpeg":
-    raise newException(UnexpectedResponseError, "Unexpected audio Content-Type")
+  let format = getOutputFormat(outputFormat)
+  if not format.acceptsContentType(headers.getOrDefault("content-type")):
+    raise newException(UnexpectedResponseError,
+      "Unexpected audio Content-Type for " & outputFormat)
   if body.len == 0:
     raise newException(UnexpectedResponseError, "Audio response contains no data")
   result.chunks.add(audioChunk(body))
 
 proc parseResponse*(binary: bool, data: openArray[byte],
-                    offsetCompensation = 0'i64): ParsedResponse =
+                    offsetCompensation = 0'i64,
+                    outputFormat = DefaultOutputFormat): ParsedResponse =
   if binary:
-    parseBinaryResponse(data)
+    parseBinaryResponse(data, outputFormat)
   else:
     parseTextResponse(data, offsetCompensation)
 

@@ -2,7 +2,7 @@ import std/uri
 import chronos
 import chronicles
 import websock/websock
-import ./[constants, protocol, text, token, types]
+import ./[constants, formats, protocol, text, token, types]
 
 type
   Communicate* = ref object
@@ -12,17 +12,18 @@ type
     streamWasCalled: bool
     offsetCompensation: int64
     cumulativeAudioBytes: int64
+    lastDurationOffset: int64
 
 proc newCommunicate*(text: string, voice = DefaultVoice, rate = "+0%",
     volume = "+0%", pitch = "+0Hz", boundary = BoundaryKind.SentenceBoundary,
-    options = defaultClientOptions()): Communicate =
+    options = defaultClientOptions(), outputFormat = DefaultOutputFormat): Communicate =
   if text.len == 0:
     raise newException(ConfigurationError, "text must not be empty")
   if options.connectTimeout <= 0.seconds or options.receiveTimeout <= 0.seconds:
     raise newException(ConfigurationError, "timeouts must be greater than zero")
 
   let config = validateConfig(TtsConfig(voice: voice, rate: rate, volume: volume,
-    pitch: pitch, boundary: boundary))
+    pitch: pitch, boundary: boundary, outputFormat: outputFormat))
   let cleaned = removeIncompatibleCharacters(text)
   let escaped = escapeXml(cleaned)
   let chunks = splitTextByByteLength(escaped, MaxTextBytes)
@@ -97,11 +98,14 @@ proc streamPart(communicate: Communicate, partialText: string,
     while not turnEnded:
       let message = await receiveMessage(ws, communicate.options.receiveTimeout)
       let parsed = parseResponse(message.binary, message.data,
-        communicate.offsetCompensation)
+        communicate.offsetCompensation, communicate.config.outputFormat)
       for chunk in parsed.chunks:
         if chunk.kind == Audio:
           audioWasReceived = true
           audioBytes += chunk.data.len
+        else:
+          communicate.lastDurationOffset = max(communicate.lastDurationOffset,
+            chunk.offset + chunk.duration)
         onChunk(chunk)
       turnEnded = parsed.turnEnded
 
@@ -122,8 +126,12 @@ proc stream*(communicate: Communicate, onChunk: ChunkCallback) {.async: (raises:
   for partialText in communicate.texts:
     let audioBytes = await communicate.streamPart(partialText, onChunk)
     communicate.cumulativeAudioBytes += audioBytes
-    communicate.offsetCompensation = communicate.cumulativeAudioBytes * 8 *
-      TicksPerSecond div Mp3BitrateBps
+    let format = getOutputFormat(communicate.config.outputFormat)
+    if format.bytesPerSecond > 0:
+      communicate.offsetCompensation = communicate.cumulativeAudioBytes *
+        TicksPerSecond div format.bytesPerSecond
+    else:
+      communicate.offsetCompensation = communicate.lastDurationOffset
 
 proc save*(communicate: Communicate, audioPath: string,
            metadataPath = "") {.async: (raises: [CatchableError, CancelledError]).} =

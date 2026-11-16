@@ -1,5 +1,5 @@
 import std/[re, strutils]
-import ./[constants, types]
+import ./[constants, formats, types]
 
 proc removeIncompatibleCharacters*(text: string): string =
   result = text
@@ -42,6 +42,9 @@ proc normalizeVoice*(voice: string): string =
 proc validateConfig*(config: TtsConfig): TtsConfig =
   result = config
   result.voice = normalizeVoice(config.voice)
+  result.outputFormat = if config.outputFormat.len == 0: DefaultOutputFormat
+                        else: config.outputFormat
+  discard getOutputFormat(result.outputFormat)
   if not config.rate.match(re"^[+-][0-9]+%$"):
     raise newException(ConfigurationError, "Invalid rate '" & config.rate & "'")
   if not config.volume.match(re"^[+-][0-9]+%$"):

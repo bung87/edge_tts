@@ -38,6 +38,23 @@ suite "Edge protocol":
     check audio.chunks[0].data == @[0xFF'u8, 0xFB'u8, 0x01'u8]
     check parseBinaryResponse(binaryMessage("Path:audio\r\n")).chunks.len == 0
 
+  test "custom output format request and audio content types":
+    var custom = config
+    custom.outputFormat = "audio-24khz-96kbitrate-mono-mp3"
+    let body = speechConfigRequest(custom).split("\r\n\r\n", 1)[1]
+    check parseJson(body)["context"]["synthesis"]["audio"]["outputFormat"].getStr() ==
+      custom.outputFormat
+
+    let audio = parseBinaryResponse(binaryMessage(
+      "Path:audio\r\nContent-Type:audio/webm; codecs=opus\r\n", [1'u8, 2'u8]),
+      "webm-24khz-16bit-mono-opus")
+    check audio.chunks.len == 1
+    check audio.chunks[0].data == @[1'u8, 2'u8]
+
+    expect UnexpectedResponseError:
+      discard parseBinaryResponse(binaryMessage(
+        "Path:audio\r\nContent-Type:video/mp4\r\n", [1'u8]))
+
   test "multiple metadata events and offset compensation":
     let body = """{"Metadata":[
       {"Type":"WordBoundary","Data":{"Offset":100,"Duration":20,"text":{"Text":"A&amp;B"}}},

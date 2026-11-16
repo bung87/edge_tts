@@ -18,6 +18,7 @@ type
     volume*: string
     pitch*: string
     boundary*: BoundaryKind
+    outputFormat*: string
 
   TtsChunkKind* {.pure.} = enum
     Audio

@@ -11,7 +11,8 @@ const
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" & ChromiumMajorVersion &
     ".0.0.0 Safari/537.36 Edg/" & ChromiumMajorVersion & ".0.0.0"
   Origin* = "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold"
-  OutputFormat* = "audio-24khz-48kbitrate-mono-mp3"
+  DefaultOutputFormat* = "audio-24khz-48kbitrate-mono-mp3"
+  OutputFormat* = DefaultOutputFormat
   MaxTextBytes* = 4096
   TicksPerSecond* = 10_000_000'i64
   Mp3BitrateBps* = 48_000'i64

@@ -79,6 +79,8 @@ for format in outputFormats():
 
 输出文件扩展名由调用方指定，应与格式匹配。两种 MP3 按对应固定字节率补偿跨分片元数据偏移；WebM/Opus 使用边界元数据结束位置补偿。
 
+服务返回的 WebM 是缺少时长和索引的流式容器。`save()` 会在合成结束后通过纯 Nim EBML 处理补齐 `Duration`、`SeekHead` 和 `Cues`，并将 Segment 改为有限长度；不会解码或重新编码 Opus，压缩音频数据保持不变。因此 WebM 的 `save()` 会暂存完整文件，而 `stream()` 回调仍逐块返回原始服务数据。
+
 ## 保存音频
 
 ```nim
@@ -132,7 +134,7 @@ proc main() {.async.} =
 waitFor(main())
 ```
 
-回调按服务到达顺序同步执行，下一帧只有在回调返回后才读取。一个 `Communicate` 实例只能调用一次 `stream` 或 `save`。长文本会按 UTF-8 和 XML 实体安全边界拆成多个 WebSocket turn，音频不会被整体缓存在内存中。
+回调按服务到达顺序同步执行，下一帧只有在回调返回后才读取。一个 `Communicate` 实例只能调用一次 `stream` 或 `save`。长文本会按 UTF-8 和 XML 实体安全边界拆成多个 WebSocket turn。`stream()` 不整体缓存音频；MP3 的 `save()` 也逐块写入，只有 WebM 的 `save()` 为终结容器而暂存完整文件。
 
 ## 参数和选项
 

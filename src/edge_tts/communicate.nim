@@ -2,7 +2,7 @@ import std/uri
 import chronos
 import chronicles
 import websock/websock
-import ./[constants, formats, protocol, text, token, types]
+import ./[constants, formats, protocol, text, token, types, webm]
 
 type
   Communicate* = ref object
@@ -135,23 +135,31 @@ proc stream*(communicate: Communicate, onChunk: ChunkCallback) {.async: (raises:
 
 proc save*(communicate: Communicate, audioPath: string,
            metadataPath = "") {.async: (raises: [CatchableError, CancelledError]).} =
-  let audioFile = open(audioPath, fmWrite)
+  let bufferWebM = communicate.config.outputFormat == "webm-24khz-16bit-mono-opus"
+  var audioFile: File
+  var webmBuffer: seq[byte]
+  if not bufferWebM:
+    audioFile = open(audioPath, fmWrite)
   var metadataFile: File
   if metadataPath.len > 0:
     try:
       metadataFile = open(metadataPath, fmWrite)
     except CatchableError:
-      audioFile.close()
+      if not audioFile.isNil:
+        audioFile.close()
       raise
   defer:
-    audioFile.close()
+    if not audioFile.isNil:
+      audioFile.close()
     if not metadataFile.isNil:
       metadataFile.close()
 
   proc onChunk(chunk: TtsChunk) {.closure, gcsafe.} =
     case chunk.kind
     of Audio:
-      if chunk.data.len > 0:
+      if bufferWebM:
+        webmBuffer.add(chunk.data)
+      elif chunk.data.len > 0:
         let written = audioFile.writeBuffer(unsafeAddr chunk.data[0], chunk.data.len)
         if written != chunk.data.len:
           raise newException(IOError, "Could not write the complete audio chunk")
@@ -160,3 +168,10 @@ proc save*(communicate: Communicate, audioPath: string,
         metadataFile.writeLine(metadataJson(chunk))
 
   await communicate.stream(onChunk)
+  if bufferWebM:
+    let finalized = finalizeWebM(webmBuffer)
+    audioFile = open(audioPath, fmWrite)
+    if finalized.len > 0:
+      let written = audioFile.writeBuffer(unsafeAddr finalized[0], finalized.len)
+      if written != finalized.len:
+        raise newException(IOError, "Could not write the complete WebM file")
